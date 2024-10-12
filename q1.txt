@@ -1,0 +1,50 @@
+By default, Django signals are executed synchronously. This means that the signal handlers (receivers) are executed in the same thread as the code that sends the signal, which can block the main process if the signal handler is slow. To illustrate this, let’s set up a simple example that demonstrates the synchronous behavior of Django signals.
+
+In this example, I have use Django's post_save signal to observe when it's triggered and complete.
+
+Example Code :- 
+    First, create a model and a signal receiver function that delays execution using time.sleep() to simulate a long-running task.
+    Then, I have saved an instance of the model and observe how it blocks the main thread until the signal completes.
+
+Step 1: Set Up Model and Signal Receiver
+
+# models.py
+from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+import time
+
+class MyModel(models.Model):
+    name = models.CharField(max_length=100)
+
+@receiver(post_save, sender=MyModel)
+def my_signal_handler(sender, instance, **kwargs):
+    print("Signal handler started.")
+    time.sleep(5)  # Simulate a time-consuming task
+    print("Signal handler finished.")
+
+Step 2: Testing the Synchronous Behavior
+Now, let's test this by creating a new instance of MyModel in the Django shell:
+
+>>> from myapp.models import MyModel
+>>> import time
+
+# Record the start time
+>>> start_time = time.time()
+>>> MyModel.objects.create(name="Test")
+
+# Record the end time
+>>> end_time = time.time()
+>>> print("Total time taken:", end_time - start_time)
+
+
+Explanation :- 
+    When MyModel.objects.create(name="Test") is called, the post_save signal is triggered.
+    The my_signal_handler starts execution immediately and sleeps for 5 seconds.
+    After 5 seconds, the handler finishes, and only then does the create call complete.
+
+Expected Output :- 
+
+    Signal handler started.
+    Signal handler finished.
+    Total time taken: 5.0

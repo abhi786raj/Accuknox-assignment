@@ -1,0 +1,52 @@
+Yes, by default, Django signals run in the same database transaction as the caller when the signal is emitted by a model operation (such as save or delete). This means that if the database transaction fails, the signal's effects are also rolled back. To demonstrate this, we can use a post_save signal and create a database transaction where we deliberately trigger an error after the signal is emitted. If the signal runs in the same transaction, any changes it makes should be rolled back if the transaction fails.
+
+We'll set up a post_save signal to modify a secondary model each time an instance of MyModel is saved.
+Then, in a database transaction, we'll save an instance of MyModel, allowing the signal to trigger.
+After the save (and thus after the signal runs), we'll deliberately raise an exception to cause the transaction to fail.
+Finally, we'll check if the changes made by the signal were committed or rolled back.
+
+Step 1: Define Models and Signal
+
+# models.py
+from django.db import models, transaction
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+class MyModel(models.Model):
+    name = models.CharField(max_length=100)
+
+class RelatedModel(models.Model):
+    description = models.CharField(max_length=100)
+
+@receiver(post_save, sender=MyModel)
+def my_signal_handler(sender, instance, **kwargs):
+    # Modify RelatedModel in the signal
+    RelatedModel.objects.create(description=f"Created for {instance.name}")
+
+Step 2: Testing Transaction Behavior
+
+>>> from django.db import transaction
+>>> from myapp.models import MyModel, RelatedModel
+
+>>> try:
+...     with transaction.atomic():
+...         instance = MyModel.objects.create(name="Test")
+...         # Intentionally raise an error after the signal is triggered
+...         raise Exception("Simulating a transaction failure")
+... except Exception as e:
+...     print(e)
+
+# Check if the RelatedModel entry was created
+>>> print("RelatedModel entries:", RelatedModel.objects.all())
+
+Explanation :- 
+    When MyModel.objects.create(name="Test") is called, the post_save signal is triggered.
+    Inside the signal, a new RelatedModel entry is created.
+    However, the transaction fails due to the intentional exception.
+    If the signal runs in the same transaction, RelatedModel.objects.all() should return an empty queryset, as the signal's action would be rolled back.
+
+Expected Output :-
+    Simulating a transaction failure
+    RelatedModel entries: <QuerySet []>
+
+If the RelatedModel entry is not created, this confirms that the signal ran in the same transaction as the caller, and its changes were rolled back when the transaction failed.
